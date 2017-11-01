@@ -1,30 +1,55 @@
 import numpy as np
+import pandas as pd
 from sklearn.model_selection import KFold
 from sklearn import metrics
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 
-# x = np.loadtxt("train_x_test.csv", delimiter=",")
-# y = np.loadtxt("train_y_test.csv", delimiter=",")
+print ("Loading training and test data...") 
 
-# Production code - uncomment for submission
-x = np.loadtxt("train_x.csv", delimiter=",")
-y = np.loadtxt("train_y.csv", delimiter=",")
-x_t = np.loadtxt("test_x.csv", delimiter=",")
+# # Production code - uncomment for submission
+# x = np.loadtxt("train_x.csv", delimiter=",")
+# y = np.loadtxt("train_y.csv", delimiter=",")
+# x_t = np.loadtxt("test_x.csv", delimiter=",")
+
+Y_train = []
+
+counter = 0
+with open('train_y.csv', 'r') as f: 
+
+    for line in f:
+        
+        if counter == 1000:
+            break
+        
+        idx = int(line.rstrip())
+        Y_train.append(idx)
+        counter+=1
+
+df_x = pd.read_csv("train_x.csv", nrows=1000)
+# df_y = pd.read_csv("train_y.csv", nrows=1000)
+
+x = df_x.values
+# Y_train = df_y.values
+
+print("Reshaping data...")
 
 # reshape the images to 64x64
 X_train = x.reshape(-1, 64, 64) 
-Y_train = y.reshape(-1, 1)
-X_test = x_t.reshape(-1, 64, 64)
+# X_test = x_t.reshape(-1, 64, 64)
 
-reg_strengths = [1 / X_train.shape(0), 10 / X_train.shape(0), 100 / X_train.shape(0), 1000 / X_train.shape(0), 10000 / X_train.shape(0)]
+# reg_strengths = [1 / X_train.shape(0), 10 / X_train.shape(0), 100 / X_train.shape(0), 1000 / X_train.shape(0), 10000 / X_train.shape(0)]
+reg_strengths = [1]
 max_iterations = [10, 100, 1000, 10000, 100000]
 tol_ranges = [1e-5, 1e-4, 1e-3, 1e-2, 1e-1]
 scaler = StandardScaler()
 
+print("Preprocessing the data...")
+
 # preprocess the data by subtracting the mean (centering) and scaling it down to unit size 
-scaler.transform(X_train)
-scaler.transform(Y_train)
+for matrix in X_train:
+    scaler.fit(matrix)
+    scaler.transform(matrix)
 
 # create indices of training data and validation data for k-fold validation
 k_folds = KFold(5, shuffle=True, random_state=69).split(Y_train)
@@ -144,7 +169,7 @@ print("Creating predictions for test data...")
 
 # Get predictions using our cross-validated hyperparameters 
 best_clf = LogisticRegression(C=best_c, solver='saga', max_iter=best_iter, tol=best_tol, n_jobs=-1)
-test_pred = clf.predict(X_test)
+# test_pred = clf.predict(X_test)
 
 print("Writing predictions to file...")
 
