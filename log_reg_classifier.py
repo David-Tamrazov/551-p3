@@ -60,21 +60,18 @@ def find_best_parameters(hyperparameter_settings, training_data, training_labels
     # get the regularization strength that produced the highest validation accuracy 
     best_setting = max(setting_performance, key=lambda item:item[1])[0]
 
-    print("Optimal hyper parameter setting: Regularization Strength: {}, Tolerance Range: {}".format(best_setting[0], best_setting[1]))
-
     return best_setting
 
 
 def write_to_file(predictions):
-    return 0
-
-def create_predictions(clf, test_set):
-    test_pred = clf.predict(test_set)
-
-    print("Writing predictions to file...")
-
-    # save predictions to file 
-    write_to_file(test_pred)
+    
+    with open("logreg_predictions.csv", 'w') as f:
+    
+        for idx, prediction in enumerate(predictions):
+            line = '{},{}\n'.format(idx, prediction)
+            f.write(line)
+    
+        f.close()
 
 
 def main():
@@ -87,12 +84,15 @@ def main():
     # x_t = np.loadtxt("test_x.csv", delimiter=",")
 
     # X = x
+    # X_test = x_t
     # Y_train = y
 
-    df_x = pd.read_csv("train_x.csv", nrows=1000)
-    df_y = pd.read_csv("train_y.csv", nrows=1000)
+    df_x = pd.read_csv("train_x.csv", nrows=10)
+    df_y = pd.read_csv("train_y.csv", nrows=10)
+    df_xt = pd.read_csv("test_x.csv", nrows=10)
 
     X = df_x.values
+    X_test = df_xt.values
     Y_train = df_y.values
 
     print "Preprocessing the data..."
@@ -108,12 +108,31 @@ def main():
 
     print "Finished cross validation for all hyper parameters."
 
+    print "Optimal hyper parameter setting: Regularization Strength: {}, Tolerance Range: {}".format(best_c, best_tol)
+
+    print "Training with optimal hyperparameters..."
+
+    # create indices of training data and validation data for k-fold validation
+    k_folds = KFold(5, shuffle=True, random_state=69).split(Y_train)
+
+    training_accuracy = []
+    validation_accuracy = []
+
+    # iterate over k-fold indices 
+    for train_idx, val_idx in k_folds:
+        
+        # train classifier with optimal hyperparameters 
+        best_clf = LogisticRegression(C=best_c, solver='saga', tol=best_tol, n_jobs=-1)
+        best_clf.fit(X_train[train_idx], Y_train[train_idx].ravel())
+
+
     print "Creating predictions for test data..."
 
-    # Get predictions using our cross-validated hyperparameters 
-    best_clf = LogisticRegression(C=best_c, solver='saga', tol=best_tol, n_jobs=-1)
+    predictions = best_clf.predict(X_test)
 
-    # create_predictions(best_clf, X_test)
+    print "Writing predictions to file..."
+
+    write_to_file(predictions)
 
     print "Done."
 
