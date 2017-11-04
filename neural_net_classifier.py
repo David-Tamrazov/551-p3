@@ -3,16 +3,16 @@ import pandas as pd
 
 
 class Neuron(object):
-    def __init__ (self, bias, intial_weight_val):
-        self.bias = bias
-        self.weights = np.full((64, 64), intial_weight_val)
+    def __init__ (self, bias, initial_weight_val):
+        self.bias = np.full((64,64), bias)
+        self.weights = np.full((64, 64), initial_weight_val)
 
     def output(self, ipt):
-        activation = np.sum(self.weights.T * ipt) + self.bias
-        return sig(activation)
+        activation = np.dot(ipt, self.weights.T) + self.bias
+        return relu(activation)
 
 class Layer(object):
-    def __init__(self, neurons=[]):
+    def __init__(self, neurons):
         self.neurons = neurons
     
     def layer_output(self, ipt): 
@@ -23,8 +23,8 @@ def fetch_data(development=True):
     
     if (development):
         # Testing code
-        df_x = pd.read_csv("train_x.csv", nrows=10)
-        df_y = pd.read_csv("train_y.csv", nrows=10)
+        df_x = pd.read_csv("train_x.csv", nrows=1000)
+        df_y = pd.read_csv("train_y.csv", nrows=1000)
 
         X = df_x.values
         Y_train = df_y.values
@@ -51,8 +51,17 @@ def fetch_data(development=True):
     return X_train, Y_train
 
 
-def preprocess_data(training_data):
-    return (training_data - np.mean(training_data)) / np.std(training_data)
+def preprocess_data(training_data):   
+
+    preprocessed_data = np.empty(training_data.shape)
+
+    for idx, img in enumerate(training_data):
+        
+        # add the preprocessed image to the preprocessed_data array
+        preprocessed_data[idx] = (img - np.mean(img)) / np.std(img)
+    
+    # print "Training Data: {} |\n Preprocessed data: {}".format(training_data, preprocess_data)
+    return preprocessed_data
 
 def sig(x, deriv=False):
     
@@ -60,6 +69,16 @@ def sig(x, deriv=False):
         return x*(1-x)
 
     return 1 / (1 + np.exp(-x))
+
+def relu(x, deriv=False):
+    
+    if (deriv):
+        dx = np.zeros(x.shape)
+        dx[(x >= 0)] = 1
+        return dx
+
+    return np.maximum(x, 0)
+
 
 def main():
 
@@ -73,23 +92,30 @@ def main():
     X_train, Y_train = fetch_data()
 
     # Create a neuron 
-    n = Neuron(0.1, 1.)
+    n = Neuron(0.1, 5.)
 
     print "Running through the neurons..."
 
 
-    alpha = 2.0
-    for x in xrange(1,10000):
+    alpha = 1.0
+
+    for x in xrange(1,10):
 
         for idx, img in enumerate(X_train):
             
             est = n.output(img)
+
             err = (Y_train[idx] - est)
+            grad = relu(est, True)
 
-            update = - (err) * sig(est, True) * img
+            update = - (err) * grad * img
+            # print "Est: {}".format(est)
+            # print "Err: {} \n\n Grad: {} \n\n".format(err, grad)
+            # print "Update: {}".format(update)
+            # print "Weights pre update: {}".format(n.weights)
             n.weights += alpha * update
+            # print "Weights post update: {}".format(n.weights)
 
-            print "Update: {}".format(update)
 
 
 main()
