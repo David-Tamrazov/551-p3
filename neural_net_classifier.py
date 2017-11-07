@@ -1,30 +1,121 @@
 import numpy as np
 import pandas as pd
+import math
 
-
-class Neuron(object):
-    def __init__ (self, bias, initial_weight_val):
-        self.bias = np.full((64,64), bias)
-        self.weights = np.full((64, 64), initial_weight_val)
-
-    def output(self, ipt):
-        activation = np.dot(ipt, self.weights.T) + self.bias
-        return relu(activation)
 
 class Layer(object):
-    def __init__(self, neurons):
-        self.neurons = neurons
     
-    def layer_output(self, ipt): 
-        return [ neuron.output(ipt) for neuron in self.neurons ]
+    def __init__(self, input_dim, layer_size):
+        self.weights = np.random.randn(input_dim, layer_size) / sqrt(input_dim)
+        self.bias = np.zeros((1, layer_size))
+    
+    def forward(self, ipt):
+        activation = np.dot(ipt, self.weights) + self.bias
+        return activation
 
 
+class Network(object):
+    
+    def __init__(self, data_dim, hidden_layer_sizes, nu_classes):
+
+        # initialize the first layer 
+        layers = [ Layer(data_dim, hidden_layer_sizes[0]) ]
+
+        # iterate over the layer sizes
+        for x in range(1, len(hidden_layer_sizes)):
+            
+            # input dim of layer k is the size of layer k-1
+            input_dim = hidden_layer_sizes[x-1]
+
+            # size of layer k
+            output_dim = hidden_layer_sizes[x]
+
+            # create the layer and append it to the list
+            layers.append( Layer(input_dim, output_dim) )
+            
+
+        # create the output layer whose output dimension is the number of classes in the data set 
+        l_n = Layer(hidden_layer_sizes[-1], nu_classes)
+        layers.append(l_n)
+
+        # set the layers of object of the network
+        self.layers = layers
+
+    def forward_pass(self, X):
+        
+        # caluculate the forward pass through the first synapse with the input layer being the dataset
+        first_l = self.layers[0]
+        pass_results = [relu(first_l.forward(X))]
+
+        # perform the forward pass with an activation function for all layers except the first and final layer
+        for idx in range(1, len(self.layers) - 1):
+            
+            l = self.layers[idx]
+            previous_result = pass_results[idx-1]
+
+            # feed the previous layer's output as this layer's input
+            activation = relu(l.forward(previous_result))
+
+            # store the activation in the pass results list for easier backpropogation later
+            pass_results.append(activation)
+
+        
+        # output of the final hidden layer 
+        o = pass_results[-1]
+
+        final_l = self.layers[-1]
+
+        # final output - pass through the synapse without applying an activation function
+        pass_results.append(final_l.forward(o))
+
+        # return the scores
+        return pass_results
+
+    def compute_regularization_loss(self, reg_strength):
+        reg_loss += (0.5 * reg_strength * np.sum(layer.weights * layer.weights) for layer in self.layers)
+        return reg_loss
+
+
+def create_label_matrix(labels, nu_classes):
+    
+    classes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 21, 24, 25, 27, 28, 30, 32, 35, 36, 40, 42, 45, 48, 49, 54, 56, 63, 64, 72, 81]
+    
+    nu_labels = len(labels)
+    
+    label_matrix = np.empty((nu_labels, 40))
+
+    for x in range(0, nu_labels):
+        
+        # get the label
+        label = labels[x][0]
+
+        # initialize an array of 0s of size nu_classes
+        arr = np.zeros((nu_classes))
+
+        # get the index of the label in the "class order" of labels
+        label_idx = classes.index(label)
+
+        # set the entry in the array of 0's that corresponds to that index to 1
+        arr[label_idx] = 1
+
+        # add the array to the label matrix
+        label_matrix[x] = arr
+        
+    return label_matrix
+
+
+def compute_class_probabilities(forward_pass_scores):
+    
+    exp_scores = np.exp(forward_pass_scores)
+    probabilities = exp_scores / np.sum(exp_scores, axis=1, keepdims=True)
+    return probabilities
+    
 def fetch_data(development=True):
     
     if (development):
         # Testing code
-        df_x = pd.read_csv("train_x.csv", nrows=1000)
-        df_y = pd.read_csv("train_y.csv", nrows=1000)
+        df_x = pd.read_csv("train_x.csv", nrows=10)
+        df_y = pd.read_csv("train_y.csv", nrows=10)
 
         X = df_x.values
         Y_train = df_y.values
@@ -42,26 +133,20 @@ def fetch_data(development=True):
 
     # preprocess the data
     print "Preprocessing the data..."
-    X_train = preprocess_data(X)
-
-    # Reshape the data
-    X_train = X_train.reshape(-1, 64, 64) # reshape 
-    Y_train = Y_train.reshape(-1, 1) 
+    X_train = standardize(X)
 
     return X_train, Y_train
 
-
-def preprocess_data(training_data):   
-
-    preprocessed_data = np.empty(training_data.shape)
-
-    for idx, img in enumerate(training_data):
-        
-        # add the preprocessed image to the preprocessed_data array
-        preprocessed_data[idx] = (img - np.mean(img)) / np.std(img)
+def standardize(X):
     
-    # print "Training Data: {} |\n Preprocessed data: {}".format(training_data, preprocess_data)
-    return preprocessed_data
+    # subtract the mean image and center the data
+    X =- X - np.mean(X, axis=0)
+
+    # normalize the data
+    X /= np.std(X, axis=0)
+
+    return X
+
 
 def sig(x, deriv=False):
     
@@ -69,6 +154,7 @@ def sig(x, deriv=False):
         return x*(1-x)
 
     return 1 / (1 + np.exp(-x))
+
 
 def relu(x, deriv=False):
     
@@ -79,6 +165,14 @@ def relu(x, deriv=False):
 
     return np.maximum(x, 0)
 
+    
+def compute_loss(labels, predictions, reg_loss):
+    
+    def compute cross_entropy_loss(labels, predictions):
+        
+        nu_data = len(predictions)
+
+        ce_loss = -np.log(predictions[range(nu_data, y)])
 
 def main():
 
@@ -91,30 +185,20 @@ def main():
     # Fetch the data 
     X_train, Y_train = fetch_data()
 
-    # Create a neuron 
-    n = Neuron(0.1, 5.)
+    # reshape the labels into an N x K matrix where N = nu samples and K = nu classes 
+    Y_matrix = create_label_matrix(Y_train, 40)
 
-    print "Running through the neurons..."
+    hidden_layer_sizes = [10, 20, 30]
 
+    network = Network(4096, hidden_layer_sizes, 40)
 
-    alpha = 1.0
+    pass_results = network.forward_pass(X_train)
 
-    for x in xrange(1,10):
+    # compute the class probabilities based off of the output of the final output layer 
+    class_probabilities = compute_class_probabilities(pass_results[-1])
 
-        for idx, img in enumerate(X_train):
+    
             
-            est = n.output(img)
-
-            err = (Y_train[idx] - est)
-            grad = relu(est, True)
-
-            update = - (err) * grad * img
-            # print "Est: {}".format(est)
-            # print "Err: {} \n\n Grad: {} \n\n".format(err, grad)
-            # print "Update: {}".format(update)
-            # print "Weights pre update: {}".format(n.weights)
-            n.weights += alpha * update
-            # print "Weights post update: {}".format(n.weights)
 
 
 
