@@ -7,7 +7,7 @@ class Layer(object):
     
     def __init__(self, input_dim, layer_size):
         self.weights = np.random.randn(input_dim, layer_size) / np.sqrt(input_dim)
-        self.bias = np.zeros((1, layer_size))
+        self.bias = np.ones((1, layer_size))
     
     def forward(self, ipt):
         activation = np.dot(ipt, self.weights) + self.bias
@@ -74,15 +74,14 @@ class Network(object):
         backpass_results = []
         parent_gradient = input_gradient
 
-        for idx in reversed(range(0,len(self.layers))):
+        for idx in reversed( range(0,len(self.layers)) ):
 
             l = self.layers[idx]
-            l_input = forward_pass_results[idx-1]
+            l_input = forward_pass_results[idx]
 
             # calculate the weight and bias gradient for this layer
             weight_gradient = np.dot(l_input.T, parent_gradient)
             bias_gradient = np.sum(parent_gradient, axis=0, keepdims=True)
-
             
             # append the gradient to backpass results for gradient updates later 
             backpass_results = [(weight_gradient, bias_gradient)] + backpass_results
@@ -93,50 +92,110 @@ class Network(object):
 
         return backpass_results
 
-    def compute_regularization_loss(self, reg_strength):
-        reg_loss = 0
-        reg_loss += (0.5 * reg_strength * np.sum(layer.weights * layer.weights) for layer in self.layers)
-        return reg_loss
+
+    def update_weights(self, backprop_results, stepsize):
+        
+        for idx, result in enumerate(backprop_results):
+            
+            layer = self.layers[idx]
+
+            weight_gradient = result[0]
+            bias_gradient = result[1]
+
+            layer.weights -= stepsize * weight_gradient
+            layer.bias -= stepsize * bias_gradient
 
 
-def create_label_matrix(labels, nu_classes):
+    def train(self, X_train, Y_train, stepsize, reg_strength):
+
+        # compute the forward pass
+        forward_pass_results = self.forward_pass(X_train)
+
+        # compute the class probabilities based off of the output of the final output layer 
+        predicted_probabilities = compute_class_probabilities(forward_pass_results[-1])
+
+        # compute the loss
+        loss = self.compute_loss(Y_train, predicted_probabilities, reg_strength)
+
+        # compute the initial gradient
+        gradient = compute_gradient(Y_train, predicted_probabilities)
+
+        # backpropogate and store the result for weight + bias updates 
+        backprop_results = self.backpropagate(gradient, forward_pass_results)
+
+        # update the weights and the bias
+        self.update_weights(backprop_results, stepsize)
+
+        return loss
+
     
+    def compute_loss(self, labels, predictions, reg_strength):
+        
+        # data loss function - keep it generic, allows us to switch out cross entropy for something else
+        def compute_data_loss(labels, predictions):
+        
+            # cross entropy data loss
+            num_data = predictions.shape[0]
+
+            ce_loss = -np.log(predictions[range(num_data), labels])
+
+            # return average loss over all data
+            return np.sum(ce_loss) / num_data
+
+       
+        # regularization loss - keep it generic, allows us to switch out l2 loss for something else
+        def compute_reg_loss(reg_strength):
+            reg_loss = 0
+            
+            # add regularization error for each set of weights
+            for layer in self.layers:
+                reg_loss += 0.5 * reg_strength * np.sum(layer.weights * layer.weights) 
+           
+            return reg_loss
+
+        # return the total loss combining data and regularization 
+        return compute_data_loss(labels, predictions) 
+
+
+# function to extract labels from lists into a one dimensional array 
+def create_label_list(labels):
+   
     classes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 21, 24, 25, 27, 28, 30, 32, 35, 36, 40, 42, 45, 48, 49, 54, 56, 63, 64, 72, 81]
-    
-    nu_labels = len(labels)
-    
-    label_matrix = np.empty((nu_labels, 40))
+  
+    # create 1D numpy array of type int 
+    label_arr = np.zeros(len(labels), dtype='uint8')
 
-    for x in range(0, nu_labels):
-        
-        # get the label
-        label = labels[x][0]
+    # add the label to the 1D array
+    for idx, label in enumerate(labels):
+        label_arr[idx] = classes.index(label[0])
 
-        # initialize an array of 0s of size nu_classes
-        arr = np.zeros((nu_classes))
-
-        # get the index of the label in the "class order" of labels
-        label_idx = classes.index(label)
-        # set the entry in the array of 0's that corresponds to that index to 1
-        arr[label_idx] = 1
-        # add the array to the label matrix
-        label_matrix[x] = arr
-        
-    return label_matrix
+    # return the new 1D array of labels
+    return label_arr
 
 
 def compute_class_probabilities(forward_pass_scores):
     
     exp_scores = np.exp(forward_pass_scores)
     probabilities = exp_scores / np.sum(exp_scores, axis=1, keepdims=True)
+
     return probabilities
     
 def fetch_data(development=True):
     
+    def standardize(X):
+        
+        # subtract the mean image and center the data
+        X =- X - np.mean(X, axis=0)
+
+        # normalize the data
+        X /= np.std(X, axis=0)
+
+        return X
+    
     if (development):
         # Testing code
-        df_x = pd.read_csv("train_x.csv", nrows=10)
-        df_y = pd.read_csv("train_y.csv", nrows=10)
+        df_x = pd.read_csv("train_x.csv", nrows=100)
+        df_y = pd.read_csv("train_y.csv", nrows=100)
 
         X = df_x.values
         Y_train = df_y.values
@@ -158,16 +217,6 @@ def fetch_data(development=True):
 
     return X_train, Y_train
 
-def standardize(X):
-    
-    # subtract the mean image and center the data
-    X =- X - np.mean(X, axis=0)
-
-    # normalize the data
-    X /= np.std(X, axis=0)
-
-    return X
-
 
 def sig(x, deriv=False):
     
@@ -186,30 +235,18 @@ def relu(x, deriv=False):
 
     return np.maximum(x, 0)
 
-    
-def compute_loss(labels, predictions, reg_loss):
-    
-    def compute_cross_entropy_loss(labels, predictions):
-        
-        nu_data = len(predictions)
-
-        ce_loss = -np.log(predictions[range(nu_data, y)])
-
-        return np.sum(ce_loss) / nu_data
-
-    avg_ce_loss = compute_cross_entropy_loss(labels, predictions)
-
-    return avg_ce_loss + reg_loss
-
-
 
 def compute_gradient(labels, predictions):
+    
+    # get the number of examples
+    num_data = predictions.shape[0]
 
-    gradient_score = labels - predictions
+    gradient_score = predictions
+    gradient_score[range(num_data),labels] -= 1
+    gradient_score /= num_data
 
     return gradient_score
 
-        
 
 def main():
 
@@ -223,21 +260,39 @@ def main():
     X_train, Y_train = fetch_data()
 
     # reshape the labels into an N x K matrix where N = nu samples and K = nu classes 
-    Y_matrix = create_label_matrix(Y_train, 40)
+    Y_train = create_label_list(Y_train)
 
-    hidden_layer_sizes = [10, 20, 30]
+    # set the network architecture
+    HIDDEN_LAYER_SIZES = [100]
 
-    network = Network(4096, hidden_layer_sizes, 40)
+    # set the termination
+    EPOCH_SIZE = 10000
 
-    forward_pass_results = network.forward_pass(X_train)
-    # compute the class probabilities based off of the output of the final output layer 
-    class_probabilities = compute_class_probabilities(forward_pass_results[-1])
+    # set the stepsize
+    STEPSIZE = .0001
 
-    gradient = compute_gradient(Y_matrix, class_probabilities)
+    # set the regularization strength
+    LAMBDA = 0.5
 
-    backprop_results = network.backpropagate(gradient, forward_pass_results)
-    hold = True
+    # create the network
+    network = Network(4096, HIDDEN_LAYER_SIZES, 40)
 
+    print "Running training..."
+
+    prev_loss = 100
+
+    for x in range(0, EPOCH_SIZE):
+        
+        # return the loss for this iteration of training 
+        loss = network.train(X_train, Y_train, STEPSIZE, LAMBDA)
+
+        # reduce the learning rate if the loss plateaus
+        if prev_loss - loss < 0.01:
+            STEPSIZE /= 2
+        
+        prev_loss = loss
+        
+        print "Iteration: {} | Loss: {}".format(x, loss)
 
 main()
     
