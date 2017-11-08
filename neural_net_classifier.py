@@ -12,11 +12,6 @@ class Layer(object):
     def forward(self, ipt):
         activation = np.dot(ipt, self.weights) + self.bias
         return activation
- 
-    def backward(self, gradient):
-        self.weights = np.dot(self.weights,gradient)
-        self.bias = np.sum(gradent,axis=0, keepdims=True)
-        return self.weights
 
 class Network(object):
     
@@ -74,9 +69,9 @@ class Network(object):
         # return the scores
         return pass_results
 
-    def back_pass(self, input_gradient, forward_pass_results):
+    def backpropagate(self, input_gradient, forward_pass_results):
 
-        backpass_results = len(forward_pass_results)
+        backpass_results = []
         parent_gradient = input_gradient
 
         for idx in reversed(range(0,len(self.layers))):
@@ -85,11 +80,12 @@ class Network(object):
             l_input = forward_pass_results[idx-1]
 
             # calculate the weight and bias gradient for this layer
-            weight_gradient = np.dot(l_input, parent_gradient)
+            weight_gradient = np.dot(l_input.T, parent_gradient)
             bias_gradient = np.sum(parent_gradient, axis=0, keepdims=True)
 
+            
             # append the gradient to backpass results for gradient updates later 
-            backpass_results[idx] = (weight_gradient, bias_gradient)
+            backpass_results = [(weight_gradient, bias_gradient)] + backpass_results
 
             # set the parent gradient for the next layer in the backprop
             parent_gradient = relu(np.dot(parent_gradient,weight_gradient.T),deriv=True)
@@ -98,6 +94,7 @@ class Network(object):
         return backpass_results
 
     def compute_regularization_loss(self, reg_strength):
+        reg_loss = 0
         reg_loss += (0.5 * reg_strength * np.sum(layer.weights * layer.weights) for layer in self.layers)
         return reg_loss
 
@@ -232,13 +229,14 @@ def main():
 
     network = Network(4096, hidden_layer_sizes, 40)
 
-    pass_results = network.forward_pass(X_train)
+    forward_pass_results = network.forward_pass(X_train)
     # compute the class probabilities based off of the output of the final output layer 
-    class_probabilities = compute_class_probabilities(pass_results[-1])
+    class_probabilities = compute_class_probabilities(forward_pass_results[-1])
 
     gradient = compute_gradient(Y_matrix, class_probabilities)
 
-    network.back_pass(gradient)
+    backprop_results = network.backpropagate(gradient, forward_pass_results)
+    hold = True
 
 
 main()
