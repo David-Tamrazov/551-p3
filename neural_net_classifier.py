@@ -6,13 +6,17 @@ import math
 class Layer(object):
     
     def __init__(self, input_dim, layer_size):
-        self.weights = np.random.randn(input_dim, layer_size) / sqrt(input_dim)
+        self.weights = np.random.randn(input_dim, layer_size) / np.sqrt(input_dim)
         self.bias = np.zeros((1, layer_size))
     
     def forward(self, ipt):
         activation = np.dot(ipt, self.weights) + self.bias
         return activation
-
+ 
+    def backward(self, gradient):
+        self.weights = np.dot(self.weights,gradient)
+        self.bias = np.sum(gradent,axis=0, keepdims=True)
+        return self.weights
 
 class Network(object):
     
@@ -43,15 +47,14 @@ class Network(object):
 
     def forward_pass(self, X):
         
-        # caluculate the forward pass through the first synapse with the input layer being the dataset
-        first_l = self.layers[0]
-        pass_results = [relu(first_l.forward(X))]
+        # set pass result of the first layer (input layer) to be the input X- this is what the first hidden layer will take as input 
+        pass_results = [X]
 
-        # perform the forward pass with an activation function for all layers except the first and final layer
-        for idx in range(1, len(self.layers) - 1):
+        # perform the forward pass with an activation function for all hidden layers 
+        for idx in range(0, len(self.layers) - 1):
             
             l = self.layers[idx]
-            previous_result = pass_results[idx-1]
+            previous_result = pass_results[idx]
 
             # feed the previous layer's output as this layer's input
             activation = relu(l.forward(previous_result))
@@ -70,6 +73,29 @@ class Network(object):
 
         # return the scores
         return pass_results
+
+    def back_pass(self, input_gradient, forward_pass_results):
+
+        backpass_results = len(forward_pass_results)
+        parent_gradient = input_gradient
+
+        for idx in reversed(range(0,len(self.layers))):
+
+            l = self.layers[idx]
+            l_input = forward_pass_results[idx-1]
+
+            # calculate the weight and bias gradient for this layer
+            weight_gradient = np.dot(l_input, parent_gradient)
+            bias_gradient = np.sum(parent_gradient, axis=0, keepdims=True)
+
+            # append the gradient to backpass results for gradient updates later 
+            backpass_results[idx] = (weight_gradient, bias_gradient)
+
+            # set the parent gradient for the next layer in the backprop
+            parent_gradient = relu(np.dot(parent_gradient,weight_gradient.T),deriv=True)
+
+
+        return backpass_results
 
     def compute_regularization_loss(self, reg_strength):
         reg_loss += (0.5 * reg_strength * np.sum(layer.weights * layer.weights) for layer in self.layers)
@@ -94,10 +120,8 @@ def create_label_matrix(labels, nu_classes):
 
         # get the index of the label in the "class order" of labels
         label_idx = classes.index(label)
-
         # set the entry in the array of 0's that corresponds to that index to 1
         arr[label_idx] = 1
-
         # add the array to the label matrix
         label_matrix[x] = arr
         
@@ -168,11 +192,27 @@ def relu(x, deriv=False):
     
 def compute_loss(labels, predictions, reg_loss):
     
-    def compute cross_entropy_loss(labels, predictions):
+    def compute_cross_entropy_loss(labels, predictions):
         
         nu_data = len(predictions)
 
         ce_loss = -np.log(predictions[range(nu_data, y)])
+
+        return np.sum(ce_loss) / nu_data
+
+    avg_ce_loss = compute_cross_entropy_loss(labels, predictions)
+
+    return avg_ce_loss + reg_loss
+
+
+
+def compute_gradient(labels, predictions):
+
+    gradient_score = labels - predictions
+
+    return gradient_score
+
+        
 
 def main():
 
@@ -193,13 +233,12 @@ def main():
     network = Network(4096, hidden_layer_sizes, 40)
 
     pass_results = network.forward_pass(X_train)
-
     # compute the class probabilities based off of the output of the final output layer 
     class_probabilities = compute_class_probabilities(pass_results[-1])
 
-    
-            
+    gradient = compute_gradient(Y_matrix, class_probabilities)
 
+    network.back_pass(gradient)
 
 
 main()
