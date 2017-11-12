@@ -228,46 +228,28 @@ def shape_to_one(img):
     return np.reshape(img, (1, dims))
 
 
-def write_to_file(X, img_dir):
-    
-    def write_list_to_file(lst, dir):
-        
-        for idx, img in enumerate(lst): 
 
-            pathname = img_dir + str(idx)
-
-            print pathname
-            
-            np.savetxt(pathname, img, delimiter=',')
-        
-
-    for idx, img_list in enumerate(X):
-    
-        pathname = img_dir + str(idx)
-
-        # write the image list to file 
-        write_list_to_file(img_list, pathname)
 
 
 def main():
     
-    X_train, Y_train, X_test = fetch_data()
+    X_train, Y_train, X_test = fetch_data(development=False)
 
     print "Preprocessing the images..."
 
     # denoise the data and convert to binary
-    X_train = preprocess_images(X_train)
+    # X_train = preprocess_images(X_train)
     X_test = preprocess_images(X_test)
 
     print "Separating images..."
 
-    X_train = separate_images(X_train)
+    # X_train = separate_images(X_train)
     X_test = separate_images(X_test)
 
    
     print "Writing images to file..."
 
-    write_to_file(X_train, 'train/')
+    # write_to_file(X_train, 'train/')
     write_to_file(X_test, 'test/')
 
     print "Done."
