@@ -202,7 +202,7 @@ def main(_):
     sess.run(tf.global_variables_initializer())
     accPh = []
     train_accuracy =0
-    for j in range(15):
+    for j in range(30):
       start_time = time.time()
       for i in range(499):
         batch_xs = train_x[(i*100):((i+1)*100)]
