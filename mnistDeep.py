@@ -132,8 +132,8 @@ def main(_):
   # train_y = np.loadtxt(pathTrainY, delimiter=",")
   # test_x = np.loadtxt(pathTestX, delimiter=",")
 
-  train_x_p = pd.read_csv('train_x_100.csv',sep=',',header=None)
-  train_y_p = pd.read_csv('train_y_100.csv',sep=',',header=None)
+  train_x_p = pd.read_csv('data/train_x.csv',sep=',',header=None)
+  train_y_p = pd.read_csv('data/train_y.csv',sep=',',header=None)
   test_x_p = pd.read_csv('data/test_x.csv',sep=',',header=None)
 
   train_x = train_x_p.as_matrix()
