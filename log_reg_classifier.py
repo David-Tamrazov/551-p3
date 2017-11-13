@@ -6,7 +6,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 
 
-def PCA(X_train, X_test, dim=1000):
+def PCA(X_train, X_test, dim=50):
     
     # center the training data 
     X_train -= np.mean(X_train, axis=0)
@@ -32,8 +32,9 @@ def PCA(X_train, X_test, dim=1000):
 
 
 def build_hyperparameter_settings():
-    reg_strengths = [1e-1, 1, 10, 100, 1000]
-    tol_ranges = [0.1, 0.2, 0.3, 0.4, 0.5]
+    reg_strengths = [1e-2, 1e-1, 1, 10, 100]
+    tol_ranges = [1e-4, 1e-3, 1e-2, 1e-1, 1]
+    # tol_ranges = [0.1, 0.2, 0.3, 0.4, 0.5]
 
     hp_settings = []
     for strength in reg_strengths:
@@ -54,6 +55,7 @@ def find_best_parameters(hyperparameter_settings, training_data, training_labels
         reg_strength, tol_range = setting
 
         # initialize the classifier with this loop's parameter settings
+       
         # penalty is l2 by default
         clf = LogisticRegression(C=reg_strength, solver='sag', multi_class='multinomial', max_iter=1000, tol=tol_range, n_jobs=-1)
 

@@ -1,6 +1,8 @@
 import numpy as np
 import pandas as pd
 import math
+import cv2
+from sklearn.model_selection import KFold
 
 
 class Layer(object):
@@ -156,6 +158,45 @@ class Network(object):
         # return the total loss combining data and regularization 
         return compute_data_loss(labels, predictions) 
 
+    def predict(self, X):
+        
+        # compute the forward pass
+        forward_pass_results = self.forward_pass(X)
+
+        # compute the class probabilities based off of the output of the final output layer 
+        predicted_probabilities = compute_class_probabilities(forward_pass_results[-1])
+
+        predictions = [] 
+
+        for probabilities in predicted_probabilities:
+            predictions.append(np.argmax(probabilities))
+        
+        return predictions
+
+
+def preprocess_images(X):
+    
+    X_preprocessed = []
+    
+    for idx, image in enumerate(X):
+        
+        # set the type to uint8 
+        img = image.astype(np.uint8)
+        
+        # remove the noise from the image
+        clean_img = cv2.fastNlMeansDenoising(img, None, 30, 7, 21)
+        
+        # convert to binary 
+        _, bin_img = cv2.threshold(clean_img,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+
+        np.reshape(bin_img, (4096,))
+        
+        X_preprocessed.append(bin_img)
+
+        
+    X_preprocessed = np.array(X_preprocessed)
+    X_preprocessed = np.reshape(X_preprocessed, (1000, 4096))
+    return X_preprocessed
 
 # function to extract labels from lists into a one dimensional array 
 def create_label_list(labels):
@@ -179,13 +220,16 @@ def compute_class_probabilities(forward_pass_scores):
     probabilities = exp_scores / np.sum(exp_scores, axis=1, keepdims=True)
 
     return probabilities
+
+
+        
     
 def fetch_data(development=True):
     
     def standardize(X):
         
         # subtract the mean image and center the data
-        X =- X - np.mean(X, axis=0)
+        X -= np.mean(X, axis=0)
 
         # normalize the data
         X /= np.std(X, axis=0)
@@ -194,10 +238,12 @@ def fetch_data(development=True):
     
     if (development):
         # Testing code
-        df_x = pd.read_csv("train_x.csv", nrows=100)
-        df_y = pd.read_csv("train_y.csv", nrows=100)
+        df_x = pd.read_csv("train_x.csv", nrows=20000)
+        df_y = pd.read_csv("train_y.csv", nrows=20000)
+        df_x_t = pd.read_csv("test_x.csv", nrows=20000)
 
-        X = df_x.values
+        X_train= df_x.values
+        X_test = df_x_t.values
         Y_train = df_y.values
     
     else:
@@ -206,16 +252,18 @@ def fetch_data(development=True):
         y = np.loadtxt("train_y.csv", delimiter=",")
         x_t = np.loadtxt("test_x.csv", delimiter=",")
 
-        X = x
+        X_train = x
         X_test = x_t
         Y_train = y
 
 
-    # preprocess the data
-    print "Preprocessing the data..."
-    X_train = standardize(X)
+    # # preprocess the data
+    # print "Preprocessing the data..."
 
-    return X_train, Y_train
+    # X_train = preprocess_images(X)
+    # X_test = preprocess_images(X_test)
+
+    return X_train, Y_train, X_test
 
 
 def sig(x, deriv=False):
@@ -248,51 +296,90 @@ def compute_gradient(labels, predictions):
     return gradient_score
 
 
+def crossvalidation_configurations(stepsizes, epoch_sizes, hidden_layers):
+    
+    configurations = [] 
+
+    for stepsize in stepsizes:
+        for epoch in epoch_sizes:
+            for hidden_layer in hidden_layers:
+                config = (stepsize, epoch, hidden_layer)
+                configurations.append(config)
+                
+    return configurations
+
+
+def find_best_parameters(hyperparameter_settings, training_data, training_labels):
+    
+    setting_performance = []
+
+    # use cross validation to find the optimal hyperparameter setting 
+    for setting in hyperparameter_settings:
+
+        # unpack the hyperparameter setting tuple 
+        stepsize, epoch, hidden_layers = setting
+
+        # initialize empty lists to score cross validation scores 
+        validation_accuracy = [] 
+        training_accuracy = []
+
+        # create indices of training data and validation data for k-fold validation
+        k_folds = KFold(5, shuffle=True, random_state=69).split(training_labels)
+
+        # create the network
+        network = Network(4096, hidden_layers, 40)
+
+        # iterate over k-fold indices 
+        for train_idx, val_idx in k_folds:
+
+            for x in range(0, epoch):
+                network.train(training_data[train_idx], training_labels[train_idx], stepsize, 0.5)
+            
+            # get predictions for measuring validation and training accuracy respectively 
+            validation_prediction = network.predict(training_data[val_idx])
+            training_prediction = network.predict(training_data[train_idx])
+
+            # measure and store the validation & training accuracy  
+            validation_accuracy.append((training_labels[val_idx] == validation_prediction).mean())
+            training_accuracy.append((training_labels[train_idx] == training_prediction).mean())
+
+        # average the training and validation accuracies over all folds
+        avg_train_acc = np.mean(training_accuracy)
+        avg_val_acc = np.mean(validation_accuracy)
+
+        print("Stepsize: {} | Epoch Size: {} | Nu Layers: {} | Layer Sizes: {} | Training Accuracy: {} | Validation Accuracy: {}".format(stepsize, epoch, len(hidden_layers), hidden_layers, avg_train_acc, avg_val_acc))
+        setting_performance.append((setting, avg_val_acc))
+
+    # get the hyperparameter setting that produced the highest validation accuracy 
+    best_setting = max(setting_performance, key=lambda item:item[1])[0]
+
+    return best_setting
+
 def main():
 
     print "Fetching data..."
 
-    # # Production code - uncomment for submission 
-    # X_train, Y_train = fetch_data(development=False)
-    # X_test = np.loadtxt("test_x.csv", delimiter=",")
+    # Production code - uncomment for submission 
+    X_train, Y_train, X_test = fetch_data(development=False)
 
-    # Fetch the data 
-    X_train, Y_train = fetch_data()
+    # # Fetch the data 
+    # X_train, Y_train, X_test = fetch_data()
 
     # reshape the labels into an N x K matrix where N = nu samples and K = nu classes 
     Y_train = create_label_list(Y_train)
 
     # set the network architecture
-    HIDDEN_LAYER_SIZES = [100]
+    HIDDEN_LAYER_SIZES = [[10], [20, 30], [30, 40, 50]]
+    EPOCHS = [10, 20, 30]
+    STEPSIZES = [.0001, .0002, .0003]
 
-    # set the termination
-    EPOCH_SIZE = 10000
+    configs = crossvalidation_configurations(STEPSIZES, EPOCHS, HIDDEN_LAYER_SIZES)
 
-    # set the stepsize
-    STEPSIZE = .0001
+    print "Running crossvalidation..."
 
-    # set the regularization strength
-    LAMBDA = 0.5
+    find_best_parameters(configs, X_train, Y_train)
 
-    # create the network
-    network = Network(4096, HIDDEN_LAYER_SIZES, 40)
-
-    print "Running training..."
-
-    prev_loss = 100
-
-    for x in range(0, EPOCH_SIZE):
-        
-        # return the loss for this iteration of training 
-        loss = network.train(X_train, Y_train, STEPSIZE, LAMBDA)
-
-        # reduce the learning rate if the loss plateaus
-        if prev_loss - loss < 0.01:
-            STEPSIZE /= 2
-        
-        prev_loss = loss
-        
-        print "Iteration: {} | Loss: {}".format(x, loss)
+    print "Finished crossvalidation."
 
 main()
     
